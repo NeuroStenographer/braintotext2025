@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  # Base environment for data processing (b2txt25)
+  braintotext-base:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: braintotext2025:base
+    container_name: braintotext-base
+    volumes:
+      - ./data:/app/data
+      - ./conf/local:/app/conf/local
+      - ./logs:/app/logs
+      - ./notebooks:/app/notebooks
+    ports:
+      - "4141:4141"  # Kedro Viz
+      - "8888:8888"  # Jupyter
+    environment:
+      - KEDRO_ENV=local
+      - PYTHONUNBUFFERED=1
+    command: kedro run
+    networks:
+      - braintotext-network
+
+  # Language model environment (b2txt25_lm)
+  braintotext-lm:
+    build:
+      context: .
+      dockerfile: Dockerfile.lm
+    image: braintotext2025:lm
+    container_name: braintotext-lm
+    volumes:
+      - ./data:/app/data
+      - ./conf/local:/app/conf/local
+      - ./logs:/app/logs
+      - ./notebooks:/app/notebooks
+      - ./models:/app/models
+    ports:
+      - "4142:4141"  # Kedro Viz (different port to avoid conflict)
+      - "8889:8888"  # Jupyter (different port to avoid conflict)
+    environment:
+      - KEDRO_ENV=local
+      - PYTHONUNBUFFERED=1
+      - TRANSFORMERS_CACHE=/app/models/pretrained
+      - HF_HOME=/app/models/pretrained
+    # Uncomment below for GPU support (requires nvidia-docker)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    command: kedro run
+    networks:
+      - braintotext-network
+
+  # Jupyter server for interactive development (base environment)
+  jupyter-base:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: braintotext2025:base
+    container_name: jupyter-base
+    volumes:
+      - ./data:/app/data
+      - ./conf/local:/app/conf/local
+      - ./notebooks:/app/notebooks
+      - ./src:/app/src
+    ports:
+      - "8890:8888"
+    environment:
+      - KEDRO_ENV=local
+      - PYTHONUNBUFFERED=1
+    command: kedro jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+    networks:
+      - braintotext-network
+
+  # Jupyter server for interactive development (LM environment)
+  jupyter-lm:
+    build:
+      context: .
+      dockerfile: Dockerfile.lm
+    image: braintotext2025:lm
+    container_name: jupyter-lm
+    volumes:
+      - ./data:/app/data
+      - ./conf/local:/app/conf/local
+      - ./notebooks:/app/notebooks
+      - ./src:/app/src
+      - ./models:/app/models
+    ports:
+      - "8891:8888"
+    environment:
+      - KEDRO_ENV=local
+      - PYTHONUNBUFFERED=1
+      - TRANSFORMERS_CACHE=/app/models/pretrained
+    command: kedro jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+    networks:
+      - braintotext-network
+
+networks:
+  braintotext-network:
+    driver: bridge
+
+volumes:
+  data:
+  models:

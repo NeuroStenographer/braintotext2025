@@ -1,0 +1,66 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Python cache
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Kedro
+.kedro/
+
+# Data files (will be mounted as volumes)
+data/
+!data/.gitkeep
+
+# Models (will be mounted as volumes)
+models/
+!models/.gitkeep
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Jupyter
+.ipynb_checkpoints
+notebooks/.ipynb_checkpoints
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Documentation
+docs/_build/
+docs/build/
+
+# Local configuration
+conf/local/
+
+# Temporary files
+*.tmp
+tmp/
+temp/

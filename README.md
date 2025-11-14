@@ -8,6 +8,31 @@ This is your new Kedro project with PySpark setup, which was generated using `ke
 
 Take a look at the [Kedro documentation](https://docs.kedro.org) to get started.
 
+## 🐳 Docker Setup (Recommended)
+
+The easiest way to run this project is using Docker, which provides two pre-configured environments:
+
+- **b2txt25 (base)**: Data processing with Kedro, PySpark, and scikit-learn
+- **b2txt25_lm (language model)**: Deep learning with PyTorch and transformers
+
+### Quick Start with Docker
+
+```bash
+# Build the Docker images
+.\docker-run.ps1 build          # Windows
+./docker-run.sh build           # Linux/Mac
+
+# Run the pipeline
+.\docker-run.ps1 run-base       # Windows
+./docker-run.sh run-base        # Linux/Mac
+
+# Start Jupyter Lab
+.\docker-run.ps1 jupyter-base   # Windows
+./docker-run.sh jupyter-base    # Linux/Mac
+```
+
+For detailed Docker instructions, see [DOCKER_README.md](DOCKER_README.md).
+
 ## Rules and guidelines
 
 In order to get the best out of the template:

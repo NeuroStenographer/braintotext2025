@@ -1,0 +1,72 @@
+# Example Conda environment specification for b2txt25_lm (language model environment)
+# This file is provided as reference. The Docker setup handles this automatically.
+#
+# To create this environment manually:
+# conda env create -f environment-lm.yml
+
+name: b2txt25_lm
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.10
+  - pip>=23.0
+  
+  # Scientific computing
+  - numpy>=1.24.0
+  - scipy>=1.10.0
+  - pandas>=2.0.0
+  
+  # Machine learning
+  - scikit-learn=1.5.1
+  
+  # Deep Learning - PyTorch (CPU version)
+  # For GPU: replace cpuonly with cudatoolkit=11.8 or appropriate CUDA version
+  - pytorch=2.1.0
+  - torchvision=0.16.0
+  - torchaudio=2.1.0
+  - cpuonly
+  
+  # PySpark and Java
+  - openjdk=11
+  - pyspark>=3.4.0
+  
+  # NLP libraries
+  - nltk>=3.8.1
+  - spacy>=3.7.0
+  
+  # Data processing
+  - h5py>=3.8.0
+  - tables>=3.8.0
+  
+  # Visualization
+  - matplotlib>=3.7.0
+  - seaborn=0.12.1
+  - plotly>=5.14.0
+  
+  # Jupyter
+  - jupyter>=1.0.0
+  - jupyterlab>=3.6.0
+  - ipython>=8.10
+  - notebook
+  
+  # Development tools
+  - pytest>=7.2.0
+  - pytest-cov>=3.0.0
+  - pytest-mock>=1.7.1
+  - ruff=0.12.0
+  
+  # Pip packages (especially for Hugging Face transformers)
+  - pip:
+    - kedro[jupyter]==1.0.0
+    - kedro-datasets>=3.0
+    - kedro-viz>=6.7.0
+    # Hugging Face ecosystem
+    - transformers>=4.35.0
+    - datasets>=2.14.0
+    - tokenizers>=0.15.0
+    - accelerate>=0.25.0
+    - sentencepiece>=0.1.99
+    - sacremoses>=0.1.0
