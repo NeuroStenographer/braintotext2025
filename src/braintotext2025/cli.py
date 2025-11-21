@@ -1,172 +1,191 @@
-from __future__ import annotations
-
-from typing import Any, Dict, Optional
+"""Project-specific Kedro CLI for braintotext2025."""
 
 import click
-from kedro.framework.cli.project import project_group
-from kedro.framework.cli.utils import _get_values_as_tuple
+from kedro.framework.cli.project import (
+    ASYNC_ARG_HELP,
+    CONFIG_FILE_HELP,
+    CONF_SOURCE_HELP,
+    FROM_INPUTS_HELP,
+    FROM_NODES_HELP,
+    LOAD_VERSION_HELP,
+    NODE_ARG_HELP,
+    PARAMS_ARG_HELP,
+    PIPELINE_ARG_HELP,
+    RUNNER_ARG_HELP,
+    TAG_ARG_HELP,
+    TO_NODES_HELP,
+    TO_OUTPUTS_HELP,
+    project_group,
+)
+from kedro.framework.cli.utils import (
+    CONTEXT_SETTINGS,
+    _config_file_callback,
+    _get_values_as_tuple,
+    _reformat_load_versions,
+    _split_params,
+    env_option,
+    split_string,
+    split_node_names,
+)
 from kedro.framework.session import KedroSession
+from kedro.framework.startup import bootstrap_project
 from kedro.utils import load_obj
 
 
-# Re-export the project_group as "cli" so Kedro can find it
-cli = project_group
+@click.group(context_settings=CONTEXT_SETTINGS, name=__package__)
+def cli() -> None:
+    """Project-specific Kedro CLI for braintotext2025."""
 
 
-@cli.command(name="run")
-@click.option("--env", "-e", type=str, default=None, help="Kedro environment.")
+@project_group.command()
+@env_option
+@click.option(
+    "--node",
+    "-n",
+    "node_names",
+    type=str,
+    multiple=True,
+    help=NODE_ARG_HELP,
+)
 @click.option(
     "--runner",
     "-r",
     type=str,
     default=None,
-    help=(
-        "Runner class to use, e.g. 'SequentialRunner', 'ParallelRunner', "
-        "or 'braintotext2025.runner.DaskRunner'."
-    ),
+    help=RUNNER_ARG_HELP,
 )
 @click.option(
-    "--is-async",
+    "--async",
+    "is_async",
     is_flag=True,
-    default=False,
-    help="Whether to use the runner in asynchronous mode (if supported).",
-)
-@click.option(
-    "--pipeline",
-    "-p",
-    "pipeline_name",
-    type=str,
-    default=None,
-    help="Name of the pipeline to run (defaults to '__default__').",
+    help=ASYNC_ARG_HELP,
 )
 @click.option(
     "--tag",
     "-t",
-    "tags",
+    type=str,
     multiple=True,
-    help="Run only nodes with these tag(s). Can be used multiple times.",
-)
-@click.option(
-    "--node",
-    "-n",
-    "node_names",
-    multiple=True,
-    help="Run only node(s) with these name(s). Can be used multiple times.",
-)
-@click.option(
-    "--from-nodes",
-    multiple=True,
-    help="Run from these node(s) onward. Can be used multiple times.",
-)
-@click.option(
-    "--to-nodes",
-    multiple=True,
-    help="Run up to these node(s). Can be used multiple times.",
+    help=TAG_ARG_HELP,
 )
 @click.option(
     "--from-inputs",
-    multiple=True,
-    help="Run only nodes dependent on these dataset(s).",
+    type=str,
+    default="",
+    help=FROM_INPUTS_HELP,
+    callback=split_string,
 )
 @click.option(
     "--to-outputs",
-    multiple=True,
-    help="Run only nodes which are ancestors of these dataset(s).",
+    type=str,
+    default="",
+    help=TO_OUTPUTS_HELP,
+    callback=split_string,
+)
+@click.option(
+    "--from-nodes",
+    type=str,
+    default="",
+    help=FROM_NODES_HELP,
+    callback=split_node_names,
+)
+@click.option(
+    "--to-nodes",
+    type=str,
+    default="",
+    help=TO_NODES_HELP,
+    callback=split_node_names,
+)
+@click.option(
+    "--config",
+    "-c",
+    type=click.Path(exists=True, dir_okay=False),
+    help=CONFIG_FILE_HELP,
+    callback=_config_file_callback,
 )
 @click.option(
     "--load-version",
+    "-lv",
+    type=str,
+    multiple=True,
+    help=LOAD_VERSION_HELP,
+)
+@click.option(
+    "--pipeline",
+    "-p",
     type=str,
     default=None,
-    help="Specify a dataset version to load.",
+    help=PIPELINE_ARG_HELP,
 )
 @click.option(
     "--params",
     type=str,
     multiple=True,
-    help=(
-        "Extra parameters to override config values, "
-        "e.g. --params train.epochs=1 --params train.lr=0.0001"
-    ),
+    help=PARAMS_ARG_HELP,
 )
-def run(
-    env: Optional[str],
-    runner: Optional[str],
-    is_async: bool,
-    pipeline_name: Optional[str],
-    tags,
+@click.option(
+    "--conf-source",
+    type=str,
+    default=None,
+    help=CONF_SOURCE_HELP,
+)
+def run(  # noqa: PLR0913 (many args – matches Kedro template)
+    env,
     node_names,
-    from_nodes,
-    to_nodes,
+    runner,
+    is_async,
+    tag,
     from_inputs,
     to_outputs,
-    load_version: Optional[str],
+    from_nodes,
+    to_nodes,
+    config,
+    load_version,
+    pipeline,
     params,
-) -> None:
-    """Run the Kedro pipeline, optionally using a Dask runner."""
+    conf_source,
+):
+    """Run the pipeline (supports DaskRunner)."""
 
-    # Default: if runner is not specified, use the standard SequentialRunner.
-    # To run with Dask, call:
-    #   kedro run --runner=braintotext2025.runner.DaskRunner
+    # Make sure project settings are bootstrapped
+    bootstrap_project("braintotext2025")
+
+    # default runner if none passed
     runner = runner or "SequentialRunner"
 
-    # Convert click's multiple=True options into tuples
-    tags = _get_values_as_tuple(tags) if tags else tags
+    # normalise CLI inputs like Kedro’s own run command
+    tag = _get_values_as_tuple(tag) if tag else tag
     node_names = _get_values_as_tuple(node_names) if node_names else node_names
+    load_version = _reformat_load_versions(load_version)
+    params = _split_params(params)
 
-    extra_params: Dict[str, Any] = {}
-    for p in params:
-        if "=" in p:
-            key, value = p.split("=", 1)
-            extra_params[key] = value
-
-    with KedroSession.create(env=env, extra_params=extra_params) as session:
+    with KedroSession.create(
+        env=env,
+        extra_params=params,
+        conf_source=conf_source,
+    ) as session:
         context = session.load_context()
         runner_instance = _instantiate_runner(runner, is_async, context)
-
         session.run(
-            tags=tags,
+            tags=tag,
             runner=runner_instance,
             node_names=node_names,
-            from_nodes=from_nodes or None,
-            to_nodes=to_nodes or None,
-            from_inputs=from_inputs or None,
-            to_outputs=to_outputs or None,
+            from_nodes=from_nodes,
+            to_nodes=to_nodes,
+            from_inputs=from_inputs,
+            to_outputs=to_outputs,
             load_versions=load_version,
-            pipeline_name=pipeline_name,
+            pipeline_name=pipeline,
         )
 
 
-def _load_runner_class(runner: str):
-    """Load a runner class.
-
-    If `runner` contains a dot, treat it as a fully qualified path, e.g.:
-        'braintotext2025.runner.DaskRunner'
-
-    Otherwise, load it from the built-in 'kedro.runner' module, e.g.:
-        'SequentialRunner', 'ParallelRunner'
-    """
-    if "." in runner:
-        module_path, class_name = runner.rsplit(".", 1)
-        return load_obj(class_name, module_path)
-    else:
-        return load_obj(runner, "kedro.runner")
-
-
 def _instantiate_runner(runner: str, is_async: bool, project_context):
-    """Instantiate the chosen runner, passing Dask config when relevant."""
-    runner_class = _load_runner_class(runner)
-    kwargs: Dict[str, Any] = {"is_async": is_async}
+    """Instantiate runner and inject Dask client args if using DaskRunner."""
+    runner_class = load_obj(runner, "kedro.runner")
+    runner_kwargs = dict(is_async=is_async)
 
-    # If you're using a custom DaskRunner (e.g. in braintotext2025.runner),
-    # you can configure it from params.dask_client in your parameters.yml:
-    #
-    # dask_client:
-    #   address: "tcp://127.0.0.1:8786"
-    #   # ... other kwargs your DaskRunner expects
-    #
-    if "DaskRunner" in runner_class.__name__:
-        dask_client_params = project_context.params.get("dask_client") or {}
-        # Many DaskRunner implementations expect something like client_args=
-        kwargs["client_args"] = dask_client_params
+    # This is the bit from the docs: read dask_client from your params
+    if runner.endswith("DaskRunner"):
+        client_args = project_context.params.get("dask_client") or {}
+        runner_kwargs.update(client_args=client_args)
 
-    return runner_class(**kwargs)
+    return runner_class(**runner_kwargs)
