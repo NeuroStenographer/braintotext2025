@@ -6,3 +6,27 @@ kedro-datasets>=3.0
 kedro-viz>=6.7.0
 scikit-learn~=1.5.1
 setuptools; python_version >= "3.12"
+# Machine Learning & Data Science
+numpy
+pandas
+scikit-learn~=1.5.1
+
+# Deep Learning
+torch
+torchaudio
+
+# HDF5 Datasets
+h5py
+
+# Metrics
+jiwer
+
+# YAML config loading
+pyyaml
+
+# Progress bar
+tqdm
+
+# Plotting
+matplotlib
+seaborn
