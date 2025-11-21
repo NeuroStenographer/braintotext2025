@@ -1,2 +1,9 @@
 dask_client:
-  address: 127.0.0.1:8786
+  # leave address blank or omit it entirely for local runs
+  # address: null
+
+  # LocalCluster options – tune for your laptop
+  processes: true
+  n_workers: 2          # or number of CPU cores you want to use
+  threads_per_worker: 1
+  # memory_limit: "2GB"  # optional

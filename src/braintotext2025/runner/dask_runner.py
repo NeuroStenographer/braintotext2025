@@ -1,12 +1,15 @@
-"""``DaskRunner`` is an ``AbstractRunner`` implementation. It can be
-used to distribute execution of ``Node``s in the ``Pipeline`` across
-a Dask cluster, taking into account the inter-``Node`` dependencies.
 """
+DaskRunner: A Kedro AbstractRunner implementation that distributes
+nodes across a Dask cluster. Supports both local (Laptop) mode
+via LocalCluster and remote scheduler mode via `address` in params.
+"""
+
 from collections import Counter
 from itertools import chain
 from typing import Any, Dict
 
-from distributed import Client, as_completed, worker_client
+from distributed import Client, LocalCluster, as_completed, worker_client
+
 from kedro.framework.hooks.manager import (
     _create_hook_manager,
     _register_hooks,
@@ -21,8 +24,7 @@ from pluggy import PluginManager
 
 
 class _DaskDataset(AbstractDataset):
-    """``_DaskDataset`` publishes/gets named datasets to/from the Dask
-    scheduler."""
+    """Publish or retrieve datasets stored on the Dask scheduler."""
 
     def __init__(self, name: str):
         self._name = name
@@ -32,9 +34,8 @@ class _DaskDataset(AbstractDataset):
             with worker_client() as client:
                 return client.get_dataset(self._name)
         except ValueError:
-            # Upon successfully executing the pipeline, the runner loads
-            # free outputs on the scheduler (as opposed to on a worker).
-            Client.current().get_dataset(self._name)
+            # If the scheduler holds the data
+            return Client.current().get_dataset(self._name)
 
     def _save(self, data: Any) -> None:
         with worker_client() as client:
@@ -51,36 +52,37 @@ class _DaskDataset(AbstractDataset):
 
 
 class DaskRunner(AbstractRunner):
-    """``DaskRunner`` is an ``AbstractRunner`` implementation. It can be
-    used to distribute execution of ``Node``s in the ``Pipeline`` across
-    a Dask cluster, taking into account the inter-``Node`` dependencies.
+    """
+    Kedro runner that distributes node execution across a Dask cluster.
+
+    Supports:
+    - Remote Dask scheduler via `dask_client: { address: ... }`
+    - Local Dask cluster via LocalCluster if no address is provided
     """
 
-    def __init__(self, client_args: Dict[str, Any] = {}, is_async: bool = False):
-        """Instantiates the runner by creating a ``distributed.Client``.
-
-        Args:
-            client_args: Arguments to pass to the ``distributed.Client``
-                constructor.
-            is_async: If True, the node inputs and outputs are loaded and saved
-                asynchronously with threads. Defaults to False.
-        """
+    def __init__(self, client_args: Dict[str, Any] = None, is_async: bool = False):
         super().__init__(is_async=is_async)
-        Client(**client_args)
+        client_args = client_args or {}
+
+        # Case 1: Connect to remote scheduler
+        if "address" in client_args and client_args["address"]:
+            self._client = Client(**client_args)
+
+        # Case 2: No address → run locally with LocalCluster
+        else:
+            cluster = LocalCluster(**client_args)
+            self._client = Client(cluster)
+
+        print(f"[DaskRunner] Connected | Dashboard: {self._client.dashboard_link}")
 
     def __del__(self):
-        Client.current().close()
+        try:
+            self._client.close()
+        except Exception:
+            pass
 
     def create_default_dataset(self, ds_name: str) -> _DaskDataset:
-        """Factory method for creating the default dataset for the runner.
-
-        Args:
-            ds_name: Name of the missing dataset.
-
-        Returns:
-            An instance of ``_DaskDataset`` to be used for all
-            unregistered datasets.
-        """
+        """Provide the default dataset type for missing datasets."""
         return _DaskDataset(ds_name)
 
     @staticmethod
@@ -91,26 +93,10 @@ class DaskRunner(AbstractRunner):
         session_id: str = None,
         *dependencies: Node,
     ) -> Node:
-        """Run a single `Node` with inputs from and outputs to the `catalog`.
+        """
+        Execute a Kedro Node inside a Dask worker.
 
-        Wraps ``run_node`` to accept the set of ``Node``s that this node
-        depends on. When ``dependencies`` are futures, Dask ensures that
-        the upstream node futures are completed before running ``node``.
-
-        A ``PluginManager`` instance is created on each worker because the
-        ``PluginManager`` can't be serialised.
-
-        Args:
-            node: The ``Node`` to run.
-            catalog: A ``DataCatalog`` containing the node's inputs and outputs.
-            is_async: If True, the node inputs and outputs are loaded and saved
-                asynchronously with threads. Defaults to False.
-            session_id: The session id of the pipeline run.
-            dependencies: The upstream ``Node``s to allow Dask to handle
-                dependency tracking. Their values are not actually used.
-
-        Returns:
-            The node argument.
+        Must re-create the HookManager on each worker (non-serializable).
         """
         hook_manager = _create_hook_manager()
         _register_hooks(hook_manager, settings.HOOKS)
@@ -125,87 +111,69 @@ class DaskRunner(AbstractRunner):
         hook_manager: PluginManager,
         session_id: str = None,
     ) -> None:
+        """
+        Orchestrates distributed execution of pipeline nodes.
+        Handles dependency scheduling + dataset cleanup.
+        """
+
         nodes = pipeline.nodes
         load_counts = Counter(chain.from_iterable(n.inputs for n in nodes))
         node_dependencies = pipeline.node_dependencies
-        node_futures = {}
+        futures = {}
 
-        client = Client.current()
+        client = self._client
+
+        # Schedule nodes on the cluster
         for node in nodes:
-            dependencies = (
-                node_futures[dependency] for dependency in node_dependencies[node]
-            )
-            node_futures[node] = client.submit(
+            deps = (futures[d] for d in node_dependencies[node])
+            futures[node] = client.submit(
                 DaskRunner._run_node,
                 node,
                 catalog,
                 self._is_async,
                 session_id,
-                *dependencies,
+                *deps,
             )
 
-        for i, (_, node) in enumerate(
-            as_completed(node_futures.values(), with_results=True)
-        ):
+        # Wait for completion
+        for i, (_, node) in enumerate(as_completed(futures.values(), with_results=True)):
             self._logger.info("Completed node: %s", node.name)
-            self._logger.info("Completed %d out of %d tasks", i + 1, len(nodes))
+            self._logger.info("Completed %d of %d tasks", i + 1, len(nodes))
 
-            # Decrement load counts, and release any datasets we
-            # have finished with. This is particularly important
-            # for the shared, default datasets we created above.
+            # Cleanup datasets no longer needed
             for dataset in node.inputs:
                 load_counts[dataset] -= 1
                 if load_counts[dataset] < 1 and dataset not in pipeline.inputs():
                     catalog.release(dataset)
+
             for dataset in node.outputs:
                 if load_counts[dataset] < 1 and dataset not in pipeline.outputs():
                     catalog.release(dataset)
 
-    def run_only_missing(
-        self, pipeline: Pipeline, catalog: DataCatalog
-    ) -> Dict[str, Any]:
-        """Run only the missing outputs from the ``Pipeline`` using the
-        datasets provided by ``catalog``, and save results back to the
-        same objects.
-
-        Args:
-            pipeline: The ``Pipeline`` to run.
-            catalog: The ``DataCatalog`` from which to fetch data.
-        Raises:
-            ValueError: Raised when ``Pipeline`` inputs cannot be
-                satisfied.
-
-        Returns:
-            Any node outputs that cannot be processed by the
-            ``DataCatalog``. These are returned in a dictionary, where
-            the keys are defined by the node outputs.
+    def run_only_missing(self, pipeline: Pipeline, catalog: DataCatalog) -> Dict[str, Any]:
+        """
+        Run only missing or incomplete parts of the pipeline.
+        Matches behavior of SequentialRunner.
         """
         free_outputs = pipeline.outputs() - set(catalog.list())
         missing = {ds for ds in catalog.list() if not catalog.exists(ds)}
         to_build = free_outputs | missing
+
         to_rerun = pipeline.only_nodes_with_outputs(*to_build) + pipeline.from_inputs(
             *to_build
         )
 
-        # We also need any missing datasets that are required to run the
-        # `to_rerun` pipeline, including any chains of missing datasets.
         unregistered_ds = pipeline.datasets() - set(catalog.list())
-        # Some of the unregistered datasets could have been published to
-        # the scheduler in a previous run, so we need not recreate them.
         missing_unregistered_ds = {
-            ds_name
-            for ds_name in unregistered_ds
-            if not self.create_default_dataset(ds_name).exists()
+            ds for ds in unregistered_ds if not self.create_default_dataset(ds).exists()
         }
+
         output_to_unregistered = pipeline.only_nodes_with_outputs(
             *missing_unregistered_ds
         )
-        input_from_unregistered = to_rerun.inputs() & missing_unregistered_ds
-        to_rerun += output_to_unregistered.to_outputs(*input_from_unregistered)
+        needed_inputs = to_rerun.inputs() & missing_unregistered_ds
+        to_rerun += output_to_unregistered.to_outputs(*needed_inputs)
 
-        # We need to add any previously-published, unregistered datasets
-        # to the catalog passed to the `run` method, so that it does not
-        # think that the `to_rerun` pipeline's inputs are not satisfied.
         catalog = catalog.shallow_copy()
         for ds_name in unregistered_ds - missing_unregistered_ds:
             catalog.add(ds_name, self.create_default_dataset(ds_name))
