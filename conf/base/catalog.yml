@@ -1,0 +1,20 @@
+# In-memory objects
+train_dataset:        type: MemoryDataSet
+val_dataset:          type: MemoryDataSet
+test_dataset:         type: MemoryDataSet
+train_loader:         type: MemoryDataSet
+val_loader:           type: MemoryDataSet
+test_loader:           type: MemoryDataSet
+
+# Outputs
+metrics:
+  type: json.JSONDataSet
+  filepath: data/08_reporting/metrics.json
+
+results_table:
+  type: pandas.ParquetDataSet
+  filepath: data/08_reporting/experiment_results.parquet
+
+submission_csv:
+  type: pandas.CSVDataSet
+  filepath: data/08_reporting/submission.csv

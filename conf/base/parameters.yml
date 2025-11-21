@@ -1,0 +1,38 @@
+paths:
+  data_dir: "data/01_raw/hdf5_data_final"     # <- point to your local data root
+  checkpoint_path: "data/01_raw/checkpoints/best_checkpoint"    # pretrained rnn path
+  args_path: "data/01_raw/checkpoints/args.yaml"                # pretrained args.yaml
+
+# data loader
+loader:
+  batch_size: 32
+  num_workers: 0
+  pin_memory: false
+  shuffle_train: true
+
+# model / training
+train:
+  device: "cuda"            # "cuda" or "cpu"
+  epochs: 5
+  lr: 0.001
+  blank_id: 0
+  vocab: [
+    'AA','AE','AH','AO','AW','AY','B','CH','D','DH','EH','ER','EY','F','G','HH',
+    'IH','IY','JH','K','L','M','N','NG','OW','OY','P','R','S','SH','T','TH','UH','UW','V','W','Y','Z','|'
+  ]
+  data_input_size: 512
+  adapter_output_size: 256
+  hidden_size: 512
+  num_layers: 1
+  bidirectional: false
+  n_head: 8                 # transformer
+  dim_feedforward: 512
+  use_checkpoint_variants:  # (model, use_checkpoint) pairs
+    - ["RNN", true]
+    - ["RNN", false]
+    - ["LSTM", true]
+    - ["LSTM", false]
+    - ["GRU", true]
+    - ["GRU", false]
+    - ["TRANSFORMER", true]
+    - ["TRANSFORMER", false]

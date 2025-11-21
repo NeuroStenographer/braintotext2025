@@ -1,15 +1,12 @@
-"""Project pipelines."""
-
-from kedro.framework.project import find_pipelines
+from __future__ import annotations
 from kedro.pipeline import Pipeline
-
+from braintotext2025.pipelines import data_processing, model_training
 
 def register_pipelines() -> dict[str, Pipeline]:
-    """Register the project's pipelines.
-
-    Returns:
-        A mapping from pipeline names to ``Pipeline`` objects.
-    """
-    pipelines = find_pipelines()
-    pipelines["__default__"] = sum(pipelines.values())
-    return pipelines
+    dp = data_processing.create_pipeline()
+    mt = model_training.create_pipeline()
+    return {
+        "__default__": dp + mt,
+        "data_processing": dp,
+        "model_training": mt,
+    }
