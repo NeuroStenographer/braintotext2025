@@ -89,3 +89,6 @@ ignore = ["E501"]  # Ruff format takes care of line-too-long
 
 [tool.kedro_telemetry]
 project_id = "6aebcad0561f4e6f969620a69d7e3e91"
+
+[project.entry-points."kedro.project_commands"]
+braintotext2025 = "braintotext2025.cli:cli"

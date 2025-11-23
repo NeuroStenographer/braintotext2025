@@ -1,45 +1,20 @@
-"""Project hooks for braintotext2025."""
+# src/braintotext2025/hooks.py
+"""Project hooks for braintotext2025.
 
-from typing import Any, Dict, Iterable, Optional
+We don't customise the config loader or catalog here; the default
+OmegaConfigLoader and DataCatalog from Kedro are used.
 
-from kedro.config import ConfigLoader
-from kedro.framework.hooks import hook_impl
-from kedro.io import DataCatalog
-from kedro.versioning import Journal
+Dask integration is handled via the custom DaskRunner and CLI,
+not via hooks.
+"""
 
 
 class ProjectHooks:
-    """Minimal project hooks.
+    """Empty hook container referenced from settings.HOOKS.
 
-    No Spark, no Dask-specific magic here – just the standard
-    config loader and catalog wiring. Dask is handled via the
-    runner and parameters, not via hooks.
+    You can add hook_impl methods here later if you need them
+    (before/after_node_run, before_pipeline_run, etc.), but for
+    now this is intentionally minimal.
     """
 
-    @hook_impl
-    def register_config_loader(
-        self,
-        conf_paths: Iterable[str],
-        env: str,
-        extra_params: Dict[str, Any],
-    ) -> ConfigLoader:
-        # Use Kedro's standard ConfigLoader; you still get env + extra_params.
-        return ConfigLoader(conf_paths, env=env, extra_params=extra_params)
-
-    @hook_impl
-    def register_catalog(
-        self,
-        catalog: Optional[Dict[str, Dict[str, Any]]],
-        credentials: Dict[str, Dict[str, Any]],
-        load_versions: Dict[str, str],
-        save_version: str,
-        journal: Journal,
-    ) -> DataCatalog:
-        # Standard catalog construction
-        return DataCatalog.from_config(
-            catalog,
-            credentials,
-            load_versions,
-            save_version,
-            journal,
-        )
+    pass
