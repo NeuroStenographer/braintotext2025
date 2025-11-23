@@ -1,14 +1,20 @@
 paths:
-  data_dir: "data/01_raw/hdf5_data_final"     # <- point to your local data root
-  checkpoint_path: "data/01_raw/checkpoints/best_checkpoint"    # pretrained rnn path
-  args_path: "data/01_raw/checkpoints/args.yaml"                # pretrained args.yaml
+  # Root of all neural HDF5 data (this is what your BrainDataset / build_datasets expects)
+  data_dir: "data/01_raw/brain-to-text-25/t15_copyTask_neuralData/hdf5_data_final"
 
-# data loader
+  # Pretrained baseline (if/when you use it)
+  baseline_root: "data/01_raw/brain-to-text-25/t15_pretrained_rnn_baseline/t15_pretrained_rnn_baseline"
+  baseline_args_yaml:      "${paths.baseline_root}/args.yaml"
+  baseline_checkpoint_dir: "${paths.baseline_root}/checkpoint"
+  baseline_best_checkpoint: "${paths.baseline_root}/best_checkpoint"
+  baseline_training_log:   "${paths.baseline_root}/training_log"
+
 loader:
   batch_size: 32
   num_workers: 0
   pin_memory: false
   shuffle_train: true
+
 
 # model / training
 train:
