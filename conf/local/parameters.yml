@@ -1,0 +1,41 @@
+##############################
+#  Project parameters (local)
+##############################
+
+paths:
+  data_dir: "data/01_raw/hdf5_data_final"
+  output_dir: "data/07_model_output"
+
+loader:
+  batch_size: 32
+  num_workers: 0
+  pin_memory: false
+  shuffle_train: true
+
+train:
+  num_epochs: 10
+  learning_rate: 0.001
+
+
+##############################
+#  Dask client settings
+##############################
+dask_client:
+  processes: false
+  threads_per_worker: 1
+  n_workers: 4
+
+
+##############################
+#  RAY CONFIGURATION
+#
+#  This is what your hooks.py reads.
+#  It MUST be top-level.
+##############################
+ray:
+  enabled: true        # This triggers the hook
+  address: null        # null = start a local Ray cluster automatically
+  num_cpus: 8
+  num_gpus: 0
+  # Any other ray.init() kwargs may go here, e.g.:
+  # include_dashboard: true
