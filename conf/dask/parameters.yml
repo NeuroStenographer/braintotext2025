@@ -1,17 +1,16 @@
+# conf/dask/parameters.yml
+# Overrides / additions when running with: --env=dask
+
+# --- Dask client configuration (used by DaskRunner) ---
 dask_client:
-  # Turn Dask-on-Ray on/off
-  use_ray: true
-
-  # Passed to ray.init(**ray_init)
-  ray_init:
-    # For local Ray:
-    num_cpus: 8
-    # For remote cluster:
-    # address: "ray://your-ray-head-node:10001"
-
-  # Normal Dask Client kwargs (still used)
-  processes: false
+  processes: false          # good for Dask-on-Ray
   threads_per_worker: 1
   n_workers: 4
-  # timeout: 60
-  # memory_limit: "4GB"
+  # memory_limit: null      # let Ray / system manage memory if you want
+
+# --- Ray / Dask-on-Ray configuration (used by hooks.py) ---
+ray:
+  enabled: true             # turn Dask-on-Ray on
+  address: null             # or "auto" to attach to an existing Ray cluster
+  num_cpus: 8               # matches your old ray_init.num_cpus
+  num_gpus: 0               # adjust if you ever use GPUs

@@ -1,29 +1,37 @@
+# src/braintotext2025/hooks.py
 """Project hooks for braintotext2025."""
+
+from __future__ import annotations
 
 from typing import Any, Dict, Iterable, Optional
 
 from kedro.config import OmegaConfigLoader
 from kedro.framework.hooks import hook_impl
 from kedro.io import DataCatalog
-from kedro.versioning import Journal
 
 # Optional Ray / Dask-on-Ray integration
 try:
-    import ray
-    from ray.util.dask import enable_dask_on_ray
-except ImportError:  # Ray not installed; we handle this gracefully below
-    ray = None
-    enable_dask_on_ray = None
+    import ray  # type: ignore
+    from ray.util.dask import enable_dask_on_ray  # type: ignore
+
+    _HAS_RAY = True
+except Exception:  # pragma: no cover
+    ray = None  # type: ignore
+    enable_dask_on_ray = None  # type: ignore
+    _HAS_RAY = False
 
 
 class ProjectHooks:
     """Project hooks.
 
-    - register_config_loader: use OmegaConfigLoader with env + extra_params
-    - after_context_created: optionally enable Dask-on-Ray
-    - register_catalog: construct the DataCatalog from config
+    - Uses OmegaConfigLoader for env + extra params.
+    - Builds a standard DataCatalog from YAML.
+    - Optionally wires Dask-on-Ray if enabled in parameters.
     """
 
+    # -----------------------------
+    # Config loader
+    # -----------------------------
     @hook_impl
     def register_config_loader(
         self,
@@ -31,51 +39,78 @@ class ProjectHooks:
         env: str,
         extra_params: Dict[str, Any],
     ) -> OmegaConfigLoader:
-        return OmegaConfigLoader(conf_paths, env=env, extra_params=extra_params)
+        """Return the OmegaConfigLoader used by the project."""
+        # This mirrors the default 0.19 project template
+        return OmegaConfigLoader(
+            conf_paths,
+            env=env,
+            base_env="base",
+            extra_params=extra_params,
+        )
 
-    @hook_impl
-    def after_context_created(self, context) -> None:
-        """Optionally enable Ray + Dask-on-Ray based on params:dask_client."""
-        params = getattr(context, "params", {}) or {}
-        dask_cfg: Dict[str, Any] = params.get("dask_client", {})
-
-        use_ray = dask_cfg.get("use_ray", False)
-        if not use_ray:
-            return  # plain Dask, nothing special to do
-
-        if ray is None or enable_dask_on_ray is None:
-            raise ImportError(
-                "You set params:dask_client.use_ray = true but Ray or "
-                "ray.util.dask is not installed.\n"
-                "Install with e.g. `pip install 'ray[default]' ray[dask]` and retry."
-            )
-
-        # Optional Ray init kwargs, e.g. num_cpus, address, etc.
-        ray_init_kwargs: Dict[str, Any] = dask_cfg.get("ray_init", {})
-
-        if not ray.is_initialized():
-            ray.init(**ray_init_kwargs)
-
-        enable_dask_on_ray()
-
-        # Log a friendly message if context has a logger
-        logger = getattr(context, "logger", None) or getattr(context, "_logger", None)
-        if logger:
-            logger.info("Dask-on-Ray backend enabled via ProjectHooks.")
-
+    # -----------------------------
+    # Catalog
+    # -----------------------------
     @hook_impl
     def register_catalog(
         self,
         catalog: Optional[Dict[str, Dict[str, Any]]],
         credentials: Dict[str, Dict[str, Any]],
         load_versions: Dict[str, str],
-        save_version: str,
-        journal: Journal,
+        save_version: Optional[str],
+        **kwargs: Any,
     ) -> DataCatalog:
+        """Build the project DataCatalog.
+
+        Note: Journal was removed in Kedro 0.18+, so we do NOT import or accept it.
+        **kwargs is here to stay forwards-compatible with any extra hook args.
+        """
         return DataCatalog.from_config(
-            catalog,
-            credentials,
-            load_versions,
-            save_version,
-            journal,
+            catalog=catalog,
+            credentials=credentials,
+            load_versions=load_versions,
+            save_version=save_version,
         )
+
+    # -----------------------------
+    # Optional: Ray + Dask-on-Ray
+    # -----------------------------
+    @hook_impl
+    def before_pipeline_run(
+        self,
+        run_params: Dict[str, Any],
+        pipeline: Any,
+        catalog: DataCatalog,
+    ) -> None:
+        """Optionally initialise Ray and Dask-on-Ray before the pipeline run.
+
+        Controlled via `params:ray` (all optional), e.g.:
+
+        ray:
+          enabled: true
+          address: "auto"
+          num_cpus: 8
+          num_gpus: 0
+        """
+        ray_cfg = run_params.get("ray") or {}
+        if not ray_cfg.get("enabled", False):
+            return
+
+        if not _HAS_RAY:
+            raise RuntimeError(
+                "Ray is enabled in parameters, but `ray` or `ray[default]` "
+                "is not installed in this environment."
+            )
+
+        # Start / connect to Ray
+        address = ray_cfg.get("address", None)
+        init_kwargs = {k: v for k, v in ray_cfg.items() if k not in {"enabled"}}
+        if address is not None:
+            init_kwargs["address"] = address
+
+        if not ray.is_initialized():
+            ray.init(**init_kwargs)
+
+        # Enable Dask-on-Ray if available
+        if enable_dask_on_ray is not None:
+            enable_dask_on_ray()
